@@ -74,7 +74,7 @@ class SupportSet(Dataset):
     def targets(self):
         # Kind of cheating, but it is the truth
         return torch.concat([
-            torch.full(size=(self.n_way,), fill_value=i) for i in range(self.n_way)
+            torch.full(size=(self.k_shot,), fill_value=i) for i in range(self.n_way)
         ])
 
     def __len__(self):
