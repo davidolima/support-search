@@ -35,18 +35,27 @@ def get_distance_function(dist_func_str: str):
             raise ValueError(f"Distance function `{dist_func_str}` is not supported.")
 
 def generate_support_set(
-        train_images,
-        train_labels,
+        train_images: torch.Tensor,
+        train_labels: torch.Tensor,
         n_way: int,
         k_shot: int,
         img_size: int,
         img_channels: int,
-        transform: torchvision.transforms.Compose,
         device: Optional[str] = "cuda",
 ):
     data_tensor = torch.empty((n_way, k_shot, img_channels, img_size, img_size), device=device)
     for i in range(n_way):
-        imgs_of_class_i = train_images[torch.where(train_labels == i)]
-        data_tensor[i] = imgs_of_class_i[torch.randperm(k_shot)].view(k_shot,1,img_size,img_size) # Select `k` random images of current class
+        # Get all images of class `i`
+        cls_idxs = torch.where(train_labels == i)
+        class_imgs = train_images[cls_idxs]
+        print(class_imgs.shape)
+
+        # Select `k` random images of current class
+        k_idxs = torch.randperm(class_imgs.size(0))[:k_shot]
+        class_imgs = class_imgs[k_idxs]
+        print(class_imgs.shape)
+        class_imgs = class_imgs.view(k_shot,-1,img_size,img_size)
+        data_tensor[i] = class_imgs
+        print('---')
 
     return data_tensor
