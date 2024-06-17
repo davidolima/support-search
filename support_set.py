@@ -15,6 +15,10 @@ class SupportSet(Dataset):
         self.k_shot = k_shot
         self.img_size = img_size
         self.img_channels = img_channels
+        
+        self.targets = torch.concat([
+            torch.full(size=(self.k_shot,), fill_value=i) for i in range(self.n_way)
+        ])
 
     @classmethod
     def empty(
@@ -70,12 +74,6 @@ class SupportSet(Dataset):
             data_tensor[i] = class_imgs
 
         return cls.from_tensor(data_tensor)
-
-    def targets(self):
-        # Kind of cheating, but it is the truth
-        return torch.concat([
-            torch.full(size=(self.k_shot,), fill_value=i) for i in range(self.n_way)
-        ])
 
     def __len__(self):
         return self.data.size(0)*self.data.size(1)
