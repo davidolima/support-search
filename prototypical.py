@@ -4,6 +4,7 @@ David Lima, 2024
 
 import random
 from typing import *
+import warnings
 
 import torch
 from tqdm import tqdm
@@ -96,10 +97,10 @@ class PrototypicalNetwork(nn.Module):
     ):
         if not device:
             device = 'cuda' if torch.cuda.is_available() else "cpu"
-            raise Warning(f"[!] Device not specified. Will proceed on detected device: {device}")
+            warnings.warn(f"[!] Device not specified. Will proceed on detected device: {device}")
         if not self.n_classes:
             self.n_classes = len(torch.unique(dataset.targets))
-            raise Warning(f"[!] Detected {self.n_classes} classes.")
+            warnings.warn(f"[!] Detected {self.n_classes} classes.")
 
         self.backbone.train().to(device)
         running_loss = 0

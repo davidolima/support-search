@@ -9,6 +9,7 @@ from torchvision.datasets import FashionMNIST
 import torchvision.transforms as T
 
 from prototypical import PrototypicalNetwork
+from support_set import SupportSet
 from utils import *
 
 # TODO: Get rid of this.
@@ -59,19 +60,17 @@ if __name__ == '__main__':
     )
 
     for _ in range(NUMBER_OF_IMAGE_PERMUTATIONS):
-        support_set = generate_support_set(
+        support_set = SupportSet.random_from_tensor(
             train_images=dataset.train_data,
             train_labels=dataset.train_labels,
             img_size=args.input_size,
             img_channels=args.input_channels,
-            transform=None,
             n_way=5,
             k_shot=5,
         )
-        print(support_set)
-        # model.fit(
-        #     epochs=args.epochs_per_search,
-        #     optimizer=optimizer,
-        #     criterion=criterion,
-        #     dataset=support_set,
-        # )
+        model.fit(
+            epochs=args.epochs_per_search,
+            optimizer=optimizer,
+            criterion=criterion,
+            dataset=support_set,
+        )
