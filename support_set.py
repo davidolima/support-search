@@ -15,7 +15,9 @@ class SupportSet(Dataset):
         self.k_shot = k_shot
         self.img_size = img_size
         self.img_channels = img_channels
-        
+
+        self.current = -1
+
         self.targets = torch.concat([
             torch.full(size=(self.k_shot,), fill_value=i) for i in range(self.n_way)
         ])
@@ -78,5 +80,15 @@ class SupportSet(Dataset):
     def __len__(self):
         return self.data.size(0)*self.data.size(1)
 
+    def __iter__(self):
+        self.current = -1
+        return self
+
+    def __next__(self):
+        self.current += 1
+        if self.current < self.__len__():
+            return self.__getitem__(self.current)
+        raise StopIteration
+    
     def __getitem__(self, index):
-        return self.data.view(-1, self.img_channels, self.img_size, self.img_size)[index]
+        return (self.data.view(-1, self.img_channels, self.img_size, self.img_size)[index], self.targets[index])
