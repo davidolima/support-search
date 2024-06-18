@@ -90,5 +90,9 @@ class SupportSet(Dataset):
             return self.__getitem__(self.current)
         raise StopIteration
     
+    def get_image_from_class(self, cls_idx, img_idx) -> torch.Tensor:
+        return self.data[cls_idx][img_idx]
+    
     def __getitem__(self, index):
         return (self.data.view(-1, self.img_channels, self.img_size, self.img_size)[index], self.targets[index])
+
