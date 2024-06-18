@@ -7,6 +7,7 @@ from typing import *
 import warnings
 
 import torch
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 import torch.nn as nn
 from torchvision.datasets import VisionDataset
@@ -25,41 +26,56 @@ class PrototypicalNetwork(nn.Module):
             n_classes: Optional[int] = None,
     ) -> None:
         super().__init__()
+        if device is None:
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            warnings.warn(f"Device not specified for PrototypicalNetwork. Using {device}.")
+
         self.backbone = backbone
         self.distance_function = distance_function
         self.use_softmax = use_softmax
         self.n_classes = n_classes
 
+        self.backbone.to(device)
         self.prototypes = self._compute_prototypes(support_set, device=device)
 
-    def extract_features(self, input: torch.Tensor) -> torch.Tensor:
-        return self.backbone(input)
-
-    def apply_distance_function(self, x) -> torch.Tensor:
-        return self.distance_function(x)
-
     def _compute_prototypes(self, support_set: SupportSet, device=None) -> torch.Tensor:
-        #TODO: Fix this crap
-        sample = self.backbone(support_set[0][0])
-        #assert len(sample.shape) > 1, f"Expected backbone to return a 1D tensor of features, got tensor of shape {x.shape} instead."
+        self.backbone.eval()
+        x = self.backbone(support_set[0][0].unsqueeze_(0).to(device))
+        assert len(x.shape) > 1, f"Expected backbone to return a 1D tensor of features, got tensor of shape {x.shape} instead."
 
-        support_set_features = torch.empty((support_set.n_way, support_set.k_shot, sample.size(1)), device=device)
-        for i, (x, y) in enumerate(support_set):
-            support_set_features[math.floor(i/support_set.n_way)][i%support_set.k_shot] = self.extract_features(x)
+        support_set_features = torch.empty((support_set.n_way*support_set.k_shot, x.size(1)), device=device)
+        for i, (x, _) in enumerate(support_set):
+            x = x.to(device).unsqueeze_(0)
+            support_set_features[i] = self.backbone(x)
 
-        return support_set_features
+        self.backbone.train()
+        return torch.cat([
+            support_set_features[torch.nonzero(support_set.targets == label)].mean(0) for label in range(support_set.n_way)
+        ])
+
+    def _compute_distance_to_prototypes(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Params:
+          x: torch.Tensor - Vector of shape (BATCH_SIZE, N_FEATURES)
+        Returns:
+          A tensor of shape (BATCH_SIZE, N_WAY) containing the distance of `x` between each prototype.
+        """
+        # TODO
+        raise RuntimeError("Not implemented yet.")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.extract_features(x)
-        x = self.apply_distance_function(x)
+        x = self.backbone(x)
+        x = self._compute_distance_to_prototypes(x)
         if self.use_softmax:
             x = x.softmax(dim=0)
         return x
 
-    @staticmethod
-    def get_random_images_from_class(class_idxs: torch.Tensor, dataset, in_channels, in_size):
-        idxs = torch.zeros((class_idxs.size(0), in_channels, in_size, in_size))
-        for i in range(class_idxs.size(0)):
-            possible_idxs = [j for j in range(len(dataset.targets)) if dataset.targets[j] == class_idxs[i]]
-            idxs[i] = dataset[random.choice(possible_idxs)][0]
-        return idxs
+    def predict(self, dataloader: DataLoader) -> Tuple[float]:
+        # TODO
+        self.backbone.eval()
+        for (x,y) in dataloader:
+            preds = self.forward(x)
+            print(preds, y)
+            break
+        self.backbone.train()
+        raise RuntimeError("Not implemented yet.")

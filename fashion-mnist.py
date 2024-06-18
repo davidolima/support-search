@@ -37,40 +37,47 @@ if __name__ == '__main__':
     print("[!] Current configuration:")
     [print(f"      {key}: {value}") for key,value in args.__dict__.items()]
 
-    backbone = get_model(args.backbone)
+    backbone, preprocessing = get_model(args.backbone)
+
     optimizer = get_optimizer(args.optimizer)(backbone.parameters(), lr=args.lr)
     dataset = FashionMNIST(
         root='/datasets/fashion-mnist/',
         train=True,
         download=True,
-        transform=T.Compose([
-            T.Grayscale(num_output_channels=args.input_channels),
-            T.ToTensor(),
-            T.Normalize(mean=[.5]*args.input_channels, std=[.5]*args.input_channels),
-        ]),
+        transform=preprocessing,
+        # transform=T.Compose([
+        #     T.Grayscale(num_output_channels=args.input_channels),
+        #     T.ToTensor(),
+        #     T.Normalize(mean=[.5]*args.input_channels, std=[.5]*args.input_channels),
+        # ]),
     )
 
     distance_function = get_distance_function(args.dist_function)
     criterion = nn.TripletMarginWithDistanceLoss(distance_function=distance_function)
 
-    model = PrototypicalNetwork(
-        backbone=backbone,
-        distance_function=distance_function,
-        use_softmax=False
-    )
-
     for _ in range(NUMBER_OF_IMAGE_PERMUTATIONS):
         support_set = SupportSet.random_from_tensor(
-            train_images=dataset.train_data,
-            train_labels=dataset.train_labels,
+            train_images=dataset.data,
+            train_labels=dataset.targets,
             img_size=args.input_size,
             img_channels=args.input_channels,
             n_way=5,
             k_shot=5,
+            device=args.device,
         )
-        model.fit(
-            epochs=args.epochs_per_search,
-            optimizer=optimizer,
-            criterion=criterion,
-            dataset=support_set,
+
+        model = PrototypicalNetwork(
+            backbone=backbone,
+            support_set=support_set,
+            distance_function=distance_function,
+            use_softmax=False,
+            device=args.device,
+        )
+
+        model.predict(
+            dataloader=DataLoader(
+                dataset=support_set,
+                batch_size=args.batch_size,
+                shuffle=True,
+            )
         )
