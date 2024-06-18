@@ -39,6 +39,13 @@ class PrototypicalNetwork(nn.Module):
         self.prototypes = self._compute_prototypes(support_set, device=device)
 
     def _compute_prototypes(self, support_set: SupportSet, device=None) -> torch.Tensor:
+        """
+        Params:
+          support_set: SupportSet
+          device: Optional[str] = None - Device to be used.
+        Returns:
+          A tensor of shape (N_WAY, N_FEATURES) containing the mean of the features of each class.
+        """
         self.backbone.eval()
         x = self.backbone(support_set[0][0].unsqueeze_(0).to(device))
         assert len(x.shape) > 1, f"Expected backbone to return a 1D tensor of features, got tensor of shape {x.shape} instead."
@@ -50,7 +57,7 @@ class PrototypicalNetwork(nn.Module):
 
         self.backbone.train()
         return torch.cat([
-            support_set_features[torch.nonzero(support_set.targets == label)].mean(0) for label in range(support_set.n_way)
+            support_set_features[torch.nonzero(support_set.targets == y)].mean(0) for y in range(support_set.n_way)
         ])
 
     def _compute_distance_to_prototypes(self, x: torch.Tensor) -> torch.Tensor:
