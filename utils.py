@@ -24,12 +24,3 @@ def get_optimizer(optim_str: str):
             return AdamW
         case _:
             raise ValueError(f"Optimizer `{optim_str}` is not supported.")
-
-def get_distance_function(dist_func_str: str):
-    match (dist_func_str.lower()):
-        case "pairwise"|"l2"|"euclidean":
-            return lambda x1,x2: nn.functional.pairwise_distance(x1,x2, p=2)
-        case "cosine":
-            return lambda x1,x2: -nn.functional.cosine_similarity(x1,x2,dim=1)
-        case _:
-            raise ValueError(f"Distance function `{dist_func_str}` is not supported.")

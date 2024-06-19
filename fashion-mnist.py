@@ -52,9 +52,6 @@ if __name__ == '__main__':
         # ]),
     )
 
-    distance_function = get_distance_function(args.dist_function)
-    criterion = nn.TripletMarginWithDistanceLoss(distance_function=distance_function)
-
     for _ in range(NUMBER_OF_IMAGE_PERMUTATIONS):
         support_set = SupportSet.random_from_tensor(
             train_images=dataset.data,
@@ -69,7 +66,7 @@ if __name__ == '__main__':
         model = PrototypicalNetwork(
             backbone=backbone,
             support_set=support_set,
-            distance_function=distance_function,
+            distance_function=args.dist_function,
             use_softmax=False,
             device=args.device,
         )
