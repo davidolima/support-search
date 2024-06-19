@@ -12,9 +12,6 @@ from prototypical import PrototypicalNetwork
 from support_set import SupportSet
 from utils import *
 
-# TODO: Get rid of this.
-NUMBER_OF_IMAGE_PERMUTATIONS = 5
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description="Script for search the k most representative images for each class of a given dataset set.",
@@ -30,6 +27,7 @@ if __name__ == '__main__':
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--n-classes", type=int, default=5)
     parser.add_argument("--lr", type=float, default=1e-5)
+    parser.add_argument("--support-set-permutations", type=int, default=5)
 
     args = parser.parse_args()
     if not args.device: args.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -45,14 +43,10 @@ if __name__ == '__main__':
         train=True,
         download=True,
         transform=preprocessing,
-        # transform=T.Compose([
-        #     T.Grayscale(num_output_channels=args.input_channels),
-        #     T.ToTensor(),
-        #     T.Normalize(mean=[.5]*args.input_channels, std=[.5]*args.input_channels),
-        # ]),
     )
 
-    for _ in range(NUMBER_OF_IMAGE_PERMUTATIONS):
+    for i in range(args.support_set_permutations):
+        # Create support set from random image of dataset
         support_set = SupportSet.random_from_tensor(
             train_images=dataset.data,
             train_labels=dataset.targets,
@@ -63,6 +57,7 @@ if __name__ == '__main__':
             device=args.device,
         )
 
+        # Initialize model with current support set
         model = PrototypicalNetwork(
             backbone=backbone,
             support_set=support_set,
@@ -71,10 +66,13 @@ if __name__ == '__main__':
             device=args.device,
         )
 
-        model.predict(
+        # Evaluate the model's classification performance on test set
+        acc, f1_score, precision, recall = model.evaluate(
             dataloader=DataLoader(
-                dataset=support_set,
+                dataset=support_set, # TODO: CHANGE TO TEST SET!
                 batch_size=args.batch_size,
                 shuffle=True,
             )
         )
+
+        print(f"[SupportSet {i}/{args.support_set_permutations}] Accuracy: {acc:.2f}% F1-Score: {f1_score:.2f} Precision: {precision:.2f}% Recall: {recall:.2f}")

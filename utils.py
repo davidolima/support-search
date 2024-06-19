@@ -24,3 +24,6 @@ def get_optimizer(optim_str: str):
             return AdamW
         case _:
             raise ValueError(f"Optimizer `{optim_str}` is not supported.")
+
+def get_device():
+    return 'cuda' if torch.cuda.is_available() else 'cpu'
