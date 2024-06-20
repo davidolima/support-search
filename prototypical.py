@@ -1,17 +1,20 @@
-from enum import Enum
+import math
 import random
-from typing import *
 import warnings
+from enum import Enum
+from typing import *
 
 import torch
-from torch.utils.data import DataLoader
-from tqdm import tqdm
 import torch.nn as nn
+from torch.utils.data import DataLoader
 from torchvision.datasets import VisionDataset
 
+from tqdm import tqdm
+
+from torcheval.metrics import MulticlassAccuracy, MulticlassF1Score
+
 from support_set import SupportSet
-from utils import get_device
-import math
+from utils import *
 
 _supported_distance_functions = Enum("_supported_distance_functions", [
     "cosine","cos",
@@ -111,7 +114,8 @@ class PrototypicalNetwork(nn.Module):
     def evaluate(
             self,
             dataloader: DataLoader,
-            device: Optional[Union[str, torch.device]] = None
+            device: Optional[Union[str, torch.device]] = None,
+            class_wise: Optional[bool] = False,
     ) -> Tuple:
         """
         Params:
@@ -121,34 +125,39 @@ class PrototypicalNetwork(nn.Module):
           A tuple of floats, containing the model's accuracy, f1_score, precision
           and recall calculated during the evaluation.
         """
+        assert self.n_way, "Unreachable: PrototypicalNetwork.n_way should be already be defined by now."
+
         device = get_device() if device is None else device
 
-        metrics = {
-            "tp": 0,
-            "fp": 0,
-            "fn": 0,
-            "tn": 0,
-        }
+        performance_metrics = torch.zeros((4), device=device) # tp, fp, fn, tn
+        class_wise_metrics = torch.zeros((self.n_way, 4), device=device) # tp, fp, fn, tn
 
         self.backbone.to(device).eval()
         for (x,y) in dataloader:
-            x,y = x.to(device), y.to(device)
+            x, y = x.to(device), y.to(device)
             with torch.no_grad():
                 distances = self.forward(x)
             preds = distances.argmin(1)
 
-            for cls in range(self.n_way):
-                binary_preds = (preds == cls)*cls
-                binary_true = (y == cls)*cls
-                metrics["tp"] += ((binary_preds == 1) & (binary_true == 1)).sum().item()
-                metrics["fp"] += ((binary_preds == 1) & (binary_true == 0)).sum().item()
-                metrics["fn"] += ((binary_preds == 0) & (binary_true == 1)).sum().item()
-                metrics["tn"] += ((binary_preds == 0) & (binary_true == 0)).sum().item()
+            performance_metrics += multiclass_performance_metrics(
+                y_pred=preds,
+                y_true=y,
+                classes=self.n_way,
+                device=device
+            )
 
-        acc       = (metrics['tp']+metrics['tn'])/(metrics['tp']+metrics['fp']+metrics['fn']+metrics['tn']) if (metrics['tp']+metrics['fp']+metrics['fn']+metrics['tn']) > 0 else .0
-        precision = metrics['tp']/(metrics['tp']+metrics['fp']) if (metrics['tp']+metrics['fp']) > 0 else .0
-        recall    = metrics['tp']/(metrics['tp']+metrics['fn']) if (metrics['tp']+metrics['fn']) > 0 else .0
-        f1_score  = 2*precision*recall/(precision+recall) if (precision+recall) > 0 else .0
+            class_wise_metrics += class_wise_performance_metrics(
+                y_pred=preds,
+                y_true=y,
+                classes=self.n_way,
+                device=device
+            )
 
         self.backbone.train()
-        return acc, f1_score, precision, recall
+
+        return class_wise_metrics if class_wise else (
+            calculate_accuracy_score(performance_metrics),
+            calculate_f1_score(performance_metrics),
+            calculate_precision(performance_metrics),
+            calculate_recall(performance_metrics),
+        )
