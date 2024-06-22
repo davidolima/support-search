@@ -1,40 +1,56 @@
-import torch
 import torch.nn as nn
-from typing import Optional
+import torch.nn.functional as F
 
-class L1Distance(nn.Module):
-    def __init__(self):
-        super(L1Distance, self).__init__()
 
-    def forward(self, x1, x2):
-        return torch.abs(x1 - x2).sum(dim=1, keepdim=True)
+class TripletLossCosineSimilarity(nn.Module):
+    def __init__(self, margin=0.2):
+        super(TripletLossCosineSimilarity, self).__init__()
+        self.margin = margin
+        self.cosine_similarity = nn.CosineSimilarity(dim=1)
+
+    def forward(self, anchor, positive, negative):
+        pos_similarity = self.cosine_similarity(anchor, positive)
+        neg_similarity = self.cosine_similarity(anchor, negative)
+        loss = F.relu(neg_similarity - pos_similarity + self.margin)
+        return loss.mean()
+    
+class TripletLossEuclideanDistance(nn.Module):
+    def __init__(self, margin=0.2):
+        super(TripletLossEuclideanDistance, self).__init__()
+        self.margin = margin
+
+    def forward(self, anchor, positive, negative):
+        pos_distance = (anchor - positive).pow(2).sum(1)
+        neg_distance = (anchor - negative).pow(2).sum(1)
+        loss = F.relu(neg_distance - pos_distance + self.margin)
+        return loss.mean()
 
 class SiameseNetwork(nn.Module):
     def __init__(self, 
                  backbone: nn.Module, 
-                 training_classifier: bool = False,
-                 in_features: int = 4096, 
-                 distance_function: nn.Module = None,
-                 support_set: Optional[nn.Module] = None) -> None:
+                 distance_function: nn.Module = nn.CosineSimilarity(dim=1),
+                 support_set: any = None) -> None:
         
         super(SiameseNetwork, self).__init__()
         self.backbone = backbone
-        self.distance_function = distance_function if distance_function is not None else L1Distance()
+        self.distance_function = distance_function
 
         if support_set is not None:
-            self.support_set = support_set
-            self.n_classes = support_set.n_way
+            self.support_set_embeddings = self._get_embeddings(support_set)
+        else:
+            self.support_set_embeddings = None            
 
-        if training_classifier:
-            # Freeze backbone parameters
-            for param in self.backbone.parameters():
-                param.requires_grad = False
-
-        self.classifier = nn.Sequential(
-            nn.Linear(in_features, 1),
-            nn.Sigmoid()
-        )
-
+    def _get_embeddings(self, support_set):
+        # 1 way k shot
+        support_set_images, support_set_labels = support_set
+        embeddings = self.forward_once(support_set_images)
+        print("===============================")
+        print(embeddings)
+        print(support_set_labels.shape)
+        print(support_set_labels)
+        print("===============================")
+        return list(zip(embeddings, support_set_labels))
+           
     def forward_once(self, x):
         return self.backbone(x)
     
@@ -44,30 +60,24 @@ class SiameseNetwork(nn.Module):
         negative_output = self.forward_once(negative)
 
         return anchor_output, positive_output, negative_output
-
-    def classifier_forward(self, x1, x2):
-        print(f"img1: {x1.shape} img2: {x2.shape}")
-        output1 = self.forward_once(x1)
-        output2 = self.forward_once(x2)
-        distances = self.distance_function(output1, output2)
-
-        return self.classifier(distances)
-
-
+    
     def forward(self, x):
-        if self.support_set is None:
+        if self.support_set_embeddings is None:
             raise RuntimeError("Support set not provided.")
-
-        similarities = []
-        for support_image, _ in self.support_set:
-            output1 = self.forward_once(x)
-            output2 = self.forward_once(support_image)
-            distance = self.distance_function(output1, output2)
-            similarity = self.classifier(distance)
-            similarities.append(similarity.item())
         
-        # Find the index of the support image with the highest similarity
-        predicted_index = similarities.index(max(similarities))
-        predicted_class = self.support_set[predicted_index][1]
-        return predicted_class
+        similarities = []
+        x_embedding = self.forward_once(x)
+        for support_embedding, label in self.support_set_embeddings:
+            #print("=====================================")
+            #print(support_embedding)
+            #print(x_embedding)
+            
+            distance = self.distance_function(x_embedding, support_embedding)
+            #print(distance)
+            #print("=====================================")
+            similarities.append((distance.item(), label))
+        
+        # Find the label of the support image with the highest similarity
+        predicted_label = max(similarities, key=lambda item: item[0])[1]
+        return predicted_label
 

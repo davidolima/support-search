@@ -23,9 +23,8 @@ class SiameseFashionMNISTBackboneNetwork(nn.Module):
         # Flatten the tensor for the fully connected layer
         x = x.view(x.size(0), -1)
         
-        # Fully connected layer with ReLU activation
+        # Fully connected layer with sigmoid activation
         x = torch.sigmoid(self.fc1(x))
-        print(x.shape)
         return x
     
 if __name__ == '__main__':
