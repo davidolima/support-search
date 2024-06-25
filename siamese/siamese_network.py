@@ -1,5 +1,8 @@
 import torch.nn as nn
 import torch.nn.functional as F
+import torch
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
 
 
 class TripletLossCosineSimilarity(nn.Module):
@@ -31,23 +34,34 @@ class SiameseNetwork(nn.Module):
     def __init__(self, 
                  backbone: nn.Module, 
                  distance_function: nn.Module = nn.PairwiseDistance(p=2),
-                 support_set: any = None) -> None:
+                 support_set: any = None,
+                 device = 'cpu') -> None:
         
         super(SiameseNetwork, self).__init__()
         self.backbone = backbone
         self.distance_function = distance_function
+        self.device = device
 
         if support_set is not None:
-            self.support_set_embeddings = self._get_embeddings(support_set)
+            self.support_set_embeddings, self.labels = self._get_embeddings(support_set)
         else:
-            self.support_set_embeddings = None            
+            self.support_set_embeddings = None 
+            self.labels = None           
 
     def _get_embeddings(self, support_set):
-        # 1 way k shot
-        support_set_images, support_set_labels = support_set
-        embeddings = self.forward_once(support_set_images)
-        return list(zip(embeddings, support_set_labels))
-           
+        # not working
+        support_set_embeddings = []
+        labels = []
+        for image, label in support_set:
+            image = image.unsqueeze(0).to(self.device)
+            with torch.no_grad():
+                embedding = self.forward_once(image)
+            
+            support_set_embeddings.append(embedding)
+            labels.append(label)
+
+        return support_set_embeddings, labels
+    
     def forward_once(self, x):
         return self.backbone(x)
     
@@ -59,17 +73,17 @@ class SiameseNetwork(nn.Module):
         return anchor_output, positive_output, negative_output
     
     def forward(self, x):
+        # Foward does not work
         if self.support_set_embeddings is None:
-            raise RuntimeError("Support set not provided.")
+           raise ValueError("Support set was not provided")
         
-        results = []
-        x_embedding = self.forward_once(x)
-        for support_embedding, label in self.support_set_embeddings:
-            distance = self.distance_function(x_embedding, support_embedding)
-            results.append((distance.item(), label))
-        
-        # Find the label of the support image with the highest similarity
-        # EUCLIDEAN - MIN
-        predicted_label = min(results, key=lambda item: item[0])[1]
-        return predicted_label
+        distances = []
+        euclidean_distance = nn.PairwiseDistance(p=2)
+        for embedding in self.support_set_embeddings:
+            distances.append(euclidean_distance(self.forward_once(x), embedding).item())
 
+        # Calculate accuracy
+        min_distance_index = distances.index(min(distances))
+        predicted_label = self.labels[min_distance_index]
+
+        return predicted_label
