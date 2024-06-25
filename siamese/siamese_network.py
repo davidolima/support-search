@@ -78,9 +78,8 @@ class SiameseNetwork(nn.Module):
            raise ValueError("Support set was not provided")
         
         distances = []
-        euclidean_distance = nn.PairwiseDistance(p=2)
         for embedding in self.support_set_embeddings:
-            distances.append(euclidean_distance(self.forward_once(x), embedding).item())
+            distances.append(self.distance_function(self.forward_once(x), embedding).item())
 
         # Calculate accuracy
         min_distance_index = distances.index(min(distances))
