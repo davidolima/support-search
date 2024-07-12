@@ -28,14 +28,22 @@ transform = transforms.Compose([
 fashion_MNIST_test_dataset = FashionMNIST(root='./data', train=False, download=True, transform=transform)
 data_loader = DataLoader(fashion_MNIST_test_dataset, batch_size=1, shuffle=True)
 
-def select_images_support_set(dataset):
+def select_images_support_set(dataset, random=False):
     """
-    Select one image per class 
+    Select one image per class randomly from the dataset.
     """
     class_images = {}
+
+    # randomly shuffle the dataset
+    if random:
+        dataset_indices = list(range(len(dataset)))
+        random.shuffle(dataset_indices)
+    else:
+        dataset_indices = range(len(dataset))
     
     # Select one image per class
-    for image, label in dataset:
+    for idx in dataset_indices:
+        image, label = dataset[idx]
         if label not in class_images:
             class_images[label] = image
         # Stop if we have one image for each class
@@ -46,10 +54,6 @@ def select_images_support_set(dataset):
     images = list(class_images.values())
     labels = list(class_images.keys())
     
-    # Add one random image from the dataset
-    random_image, random_label = random.choice(dataset)
-    random_image = random_image.unsqueeze(0).to(device)
-
     return images, labels
 
 # Get images and compute embeddings
@@ -57,35 +61,44 @@ support_imgs, labels = select_images_support_set(fashion_MNIST_test_dataset)
 support_embeddings = []
 
 with torch.no_grad():
-    for img in support_imgs:
-        img = img.unsqueeze(0).to(device)  # Unsqueeze and move to device
-        embedding = siamese_network.forward_once(img)
-        support_embeddings.append(embedding)
+    with open('siamese/support_images.txt', 'w') as f:
+        for img in support_imgs:
+            img = img.unsqueeze(0).to(device)  # Unsqueeze and move to device
+            f.write(f"{img} \n\n")
+            embedding = siamese_network.forward_once(img)
+            f.write(f"{embedding} \n\n")
+            support_embeddings.append(embedding)
 
 correct, incorrect = 0, 0
-true_labels = []
-predicted_labels = []
+true_labels, predicted_labels = [], []
 
 for idx, (x, label) in enumerate(data_loader):
+    x = x.to(device)
     x_embedding = siamese_network.forward_once(x)
 
     distances = []
     euclidean_distance = nn.PairwiseDistance(p=2)
-    for embedding in support_embeddings:
-        distances.append(euclidean_distance(x_embedding, embedding).item())
+    with open('siamese/test_images/embeddings.txt', 'w') as f:
+        for embedding in support_embeddings:
+            f.write(f"{embedding} \n\n")
+            distances.append(euclidean_distance(x_embedding, embedding).item())
+        
+        f.write("x_embedding: \n")
+        f.write(f"{x_embedding} \n\n")
 
     min_distance_index = distances.index(min(distances))
     predicted_label = labels[min_distance_index]
     
-    if predicted_label == label:
+    if predicted_label == label.item():
         correct +=1
     else: 
         incorrect +=1
     
     true_labels.append(label.item())
     predicted_labels.append(predicted_label)
+    break
 
-print(f"Accuracy: {correct / (correct + incorrect) * 100:.2f}%")
+"""print(f"Accuracy: {correct / (correct + incorrect) * 100:.2f}%")
 
 # Calculate confusion matrix
 conf_matrix = confusion_matrix(true_labels, predicted_labels)
@@ -106,3 +119,4 @@ plt.yticks(tick_marks, fashion_MNIST_test_dataset.classes)
 plt.xlabel('Predicted Label')
 plt.ylabel('True Label')
 plt.savefig('siamese/test_images/confusion_matrix.png')
+ """
